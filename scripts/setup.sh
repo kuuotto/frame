@@ -140,8 +140,8 @@ print_header  "Activating the virtual environment"
 source venv/bin/activate
 
 print_header  "Installing the Pimoroni Inky libraries."
-sudo pip3 install inky[rpi,example-depends] > /dev/null &
-sudo pip3 install inky > /dev/null &
+pip install inky[rpi,example-depends] > /dev/null &
+pip install inky > /dev/null &
 show_loader "   Installing packages...    "
 #curl https://get.pimoroni.com/inky | bash
 
@@ -191,7 +191,7 @@ print_success "Service created!"
 
 # Install required pip packages
 print_header  "\nInstalling required packages with pip"
-sudo pip install -r $currentWorkingDir/config/requirements.txt > /dev/null &
+pip install -r $currentWorkingDir/config/requirements.txt > /dev/null &
 show_loader "   Installing packages...   "
 
 print_success "Packages Installed!\n"
