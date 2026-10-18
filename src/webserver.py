@@ -8,7 +8,7 @@ from PIL import Image
 import json
 from inky.auto import auto
 import RPi.GPIO as GPIO
-from PIL import ImageDraw,Image 
+from PIL import ImageDraw,Image,ImageOps 
 import generateInfo
 # Gpio button pins from top to bottom
 
@@ -187,8 +187,10 @@ def updateEink(filename,orientation,adjustAR):
     with Image.open(os.path.join(PATH, "img/",filename)) as img:
 
         #do image transforms 
-        img = changeOrientation(img,orientation)
-        img = adjustAspectRatio(img,adjustAR)    
+        print(f"Orientation {orientation}, forcing 1")
+        img = changeOrientation(img, 1)
+        # img = adjustAspectRatio(img,adjustAR)    
+        img = ImageOps.fit(img, (inky_display.width, inky_display.height))
 
         # Display the image
         inky_display.set_image(img)
@@ -209,9 +211,9 @@ def changeOrientation(img,orientation):
     # 0 = horizontal
     # 1 = portrait
     if orientation == 0:
-        img = img.rotate(0)
+        img = img.rotate(180, expand=True)
     elif orientation == 1:
-        img = img.rotate(90)
+        img = img.rotate(90, expand=True)
     return img
 
 def adjustAspectRatio(img,adjustARBool):
@@ -229,7 +231,7 @@ def adjustAspectRatio(img,adjustARBool):
             resizedWidth = round(ratioHeight * img.width)
             resizedHeight = h
         imgResized = img.resize((resizedWidth, resizedHeight), Image.LANCZOS)
-        background = Image.new('RGBA', (w, h), (0, 0, 0, 255))
+        background = Image.new('RGBA', (w, h), (255, 255, 255, 255))
 
         #offset image for background and paste the image
         offset = (round((w - resizedWidth) / 2), round((h - resizedHeight) / 2))
@@ -261,7 +263,9 @@ def uploaded_file(filename):
 
 #run button checks on gpio    
 for pin in BUTTONS:
-        GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+    print(pin)    
+    GPIO.add_event_detect(pin, GPIO.FALLING, handleButton, bouncetime=250)
+    
 if __name__ == '__main__':
     app.secret_key = str(random.randint(100000,999999))
     app.run(host="0.0.0.0",port=80)

@@ -28,6 +28,10 @@ else
   fi
 fi
 
+echo "Activating the Python virtual environment"
+
+source $currentDir/env/bin/activate
+
 echo "starting PiInk frame webserver!"
 
 sudo python $currentDir/src/webserver.py
