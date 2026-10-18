@@ -111,7 +111,7 @@ while true; do
     print_underline "$(print_bold "It will do the following:\n")"
     echo "   [•] Set the hostname to 'PiInk'."
     echo "   [•] Setup bonjour."
-    echo "   [•] Create a log file."
+    # echo "   [•] Create a log file."
     echo "   [•] Create a systemd service so that the Webserver starts on boot."
     echo -e "   [•] Install Required Python packages via pip.\n"
 
@@ -132,6 +132,12 @@ while true; do
 done
 
 enable_interfaces
+
+print_header  "Creating a Python virtual environment"
+python -m venv venv
+
+print_header  "Activating the virtual environment"
+source venv/bin/activate
 
 print_header  "Installing the Pimoroni Inky libraries."
 sudo pip3 install inky[rpi,example-depends] > /dev/null &
