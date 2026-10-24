@@ -1,15 +1,17 @@
 import urllib.request
-import os,random,time,signal
-from flask import Flask, flash, request, redirect, url_for,render_template
+import os,random
+from flask import Flask, flash, request,render_template
 from werkzeug.utils import secure_filename
 from flask import send_from_directory
-from datetime import datetime
-from PIL import Image
 import json
 from inky.auto import auto
 import RPi.GPIO as GPIO
-from PIL import ImageDraw,Image,ImageOps 
+from PIL import Image,ImageOps 
 import generateInfo
+import threading
+
+displayLock = threading.Lock()
+
 # Gpio button pins from top to bottom
 
 #5 == info
@@ -18,8 +20,6 @@ import generateInfo
 #24 == reboot
 
 BUTTONS = [5, 6, 16, 24]
-ORIENTATION = 0
-ADJUST_AR = False
 
 #Set up RPi.GPIO
 GPIO.setmode(GPIO.BCM)
@@ -28,22 +28,19 @@ GPIO.setup(BUTTONS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 # Get the current path
 PATH = os.path.dirname(os.path.dirname(__file__))
 print(PATH)
-UPLOAD_FOLDER = os.path.join(PATH,"img")
+UPLOAD_FOLDER = os.path.join(PATH, "img")
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg','webp'}
 print(ALLOWED_EXTENSIONS)
 
 # Check whether the specified path exists or not
-pathExist = os.path.exists(os.path.join(PATH,"img"))
-
-if(pathExist == False):
-   os.makedirs(os.path.join(PATH,"img"))
+if not os.path.exists(UPLOAD_FOLDER):
+   os.makedirs(UPLOAD_FOLDER)
 
 #setup eink display and border
 inky_display = auto(ask_user=True, verbose=True)
 inky_display.set_border(inky_display.BLACK)
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 #handles button presses
 def handleButton(pin):
@@ -52,13 +49,13 @@ def handleButton(pin):
         print("--A-- Pressed: Show PiInk info")
         generateInfo.infoGen(inky_display.width,inky_display.height)
         #update the eink display
-        updateEink("infoImage.png",0,"")
+        updateEinkAsync("infoImage.png", 0)
     elif(pin == 6):
         print("--B-- Pressed: Rotate image clockwise")
-        rotateImage(-90)
+        threading.Thread(target=rotateImage, args=(-90,), daemon=True).start()
     elif(pin == 16):
         print("--C-- Pressed: Rotate image counter clockwise")
-        rotateImage(90)
+        threading.Thread(target=rotateImage, args=(90,), daemon=True).start()
     elif(pin == 24):
         print("--D-- Pressed: Reboot the Pi")
         os.system('sudo reboot')  
@@ -69,18 +66,9 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
-    print("req ",request.files)    
-    ADJUST_AR = False
+    print("req ", request.files)    
 
-    arSwitchCheck,horizontalOrientationRadioCheck,verticalOrientationRadioCheck = loadSettings()
-
-    if horizontalOrientationRadioCheck == "checked":
-        ORIENTATION = 0
-    else:
-        ORIENTATION = 1
-    
-    if arSwitchCheck == "checked":
-        ADJUST_AR = True
+    arSwitchCheck, horizontalOrientationRadioCheck, verticalOrientationRadioCheck = loadSettings()
     
     if request.method == 'POST':
         
@@ -92,11 +80,15 @@ def upload_file():
             if file and allowed_file(file.filename):
                 deleteImage()
                 filename = secure_filename(file.filename)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                filename = os.path.join(app.config['UPLOAD_FOLDER'],filename)
+                filename = os.path.join(UPLOAD_FOLDER, filename)
+                file.save(filename)
 
-                #update the eink display
-                updateEink(filename,ORIENTATION,ADJUST_AR)
+                # reset rotation
+                writeSettingsFile(rotation = 0)
+
+                # update the display
+                updateEinkAsync(filename)
+
                 if(len(request.form) == 0):
                     return "File uploaded successfully", 200
             else:
@@ -108,8 +100,13 @@ def upload_file():
                     filename = filename.split("?")[0]
                     print(filename)
                     #grab the url and download it to the folder
-                    urllib.request.urlretrieve(imageLink, os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    updateEink(filename,ORIENTATION,ADJUST_AR)
+                    urllib.request.urlretrieve(imageLink, os.path.join(UPLOAD_FOLDER, filename))
+
+                    # reset rotation
+                    writeSettingsFile(rotation = 0)
+
+                    # update the display
+                    updateEinkAsync(filename)
                 except:
                     #flash error message
                     flash("Error: Unsupported Media or Invalid Link!")
@@ -129,12 +126,12 @@ def upload_file():
         #rotate clockwise
         if request.form["submit"] == 'rotateImage':
             print("rotating image")
-            rotateImage(-90)
+            threading.Thread(target=rotateImage, args=(-90,), daemon=True).start()
 
         #ghosting clears
         if request.form["submit"] == 'clearGhost':
             print("ghosting clear call!")
-            clearScreen()
+            threading.Thread(target=clearScreen, daemon=True).start()
 
         #save frame settings
         if request.form["submit"] == 'Save Settings':
@@ -151,46 +148,64 @@ def upload_file():
                 arSwitchCheck = ""
                 pass
             saveSettings(horizontalOrientationRadioCheck,verticalOrientationRadioCheck,arSwitchCheck)
+            updateEinkAsync(os.listdir(UPLOAD_FOLDER)[0])
             return render_template('main.html',horizontalOrientationRadioCheck = horizontalOrientationRadioCheck,verticalOrientationRadioCheck=verticalOrientationRadioCheck,arSwitchCheck=arSwitchCheck)       
     return render_template('main.html',horizontalOrientationRadioCheck = horizontalOrientationRadioCheck,verticalOrientationRadioCheck=verticalOrientationRadioCheck,arSwitchCheck=arSwitchCheck)
 
-def loadSettings():
-    horizontalOrient = ""
-    verticalOrient = ""
+SETTINGS_FILE = os.path.join(PATH, "config/settings.json")
+settingsLock = threading.RLock()
+
+def readSettingsFile():
     try:
-        jsonFile = open(os.path.join(PATH,"config/settings.json"))
-    except:
-        saveSettings("","checked",'aria-checked="false"')
-        jsonFile = open(os.path.join(PATH,"config/settings.json"))
-    settingsData = json.load(jsonFile)
-    jsonFile.close()
+        with open(SETTINGS_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+def writeSettingsFile(**changes):
+    with settingsLock:
+        data = readSettingsFile()
+        data.update(changes)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(data, f)
+
+def loadSettings():
+    settingsData = readSettingsFile()
+    arSwitchCheck = settingsData.get("adjust_aspect_ratio", "")
     if settingsData.get("orientation") == "Horizontal":
-        horizontalOrient = "checked"
-        verticalOrient = ""
-    else:
-        verticalOrient = "checked"
-        horizontalOrient = ""
-    return settingsData.get("adjust_aspect_ratio"),horizontalOrient,verticalOrient
+        return arSwitchCheck, "checked", ""
+    return arSwitchCheck, "", "checked"
+
 def saveSettings(orientationHorizontal,orientationVertical,adjustAR):
-    if orientationHorizontal == "checked":
-        orientationSetting = "Horizontal"
-    else:
-        orientationSetting = "Vertical"
-    jsonStr = {
-        "orientation":orientationSetting,
-        "adjust_aspect_ratio":adjustAR,
-    }
-    with open(os.path.join(PATH,"config/settings.json"), "w") as f:
-        json.dump(jsonStr, f)
+    orientationSetting = "Horizontal" if orientationHorizontal == "checked" else "Vertical"
+    writeSettingsFile(orientation=orientationSetting, adjust_aspect_ratio=adjustAR)
 
-def updateEink(filename,orientation,adjustAR):
-    with Image.open(os.path.join(PATH, "img/",filename)) as img:
+def updateEinkAsync(*args):
+    threading.Thread(target=updateEink, args=args, daemon=True).start()
 
-        #do image transforms 
-        print(f"Orientation {orientation}, forcing 1")
-        img = changeOrientation(img, 1)
-        # img = adjustAspectRatio(img,adjustAR)    
-        img = ImageOps.fit(img, (inky_display.width, inky_display.height))
+def updateEink(filename, rotation=None):
+    settings = readSettingsFile()
+    # how the frame is oriented: in portait the eink is rotated 90deg, in
+    # landscape 180deg
+    frameRotation = 180 if settings.get("orientation") == "Horizontal" else 90
+    if rotation is None:
+        rotation = settings.get("rotation", 0)
+
+    with displayLock, Image.open(os.path.join(UPLOAD_FOLDER, filename)) as img:
+        # decode JPEGs at reduced size for faster processing
+        img.draft("RGB", (inky_display.width * 2, inky_display.height * 2))
+
+        # Rotation
+        img = ImageOps.exif_transpose(img).convert("RGB") # respect photo rotation
+        img = img.rotate(frameRotation + rotation, expand=True)
+
+        # Fill vs. letterbox
+        if settings.get("adjust_aspect_ratio") == "checked":
+            # letterbox, show the whole photo
+            img = ImageOps.pad(img, (inky_display.width, inky_display.height), color = "white")
+        else:
+            # crop to fill
+            img = ImageOps.fit(img, (inky_display.width, inky_display.height))
 
         # Display the image
         inky_display.set_image(toInkyPalette(img))
@@ -200,10 +215,12 @@ def updateEink(filename,orientation,adjustAR):
 def clearScreen():
     print("running ghost clear")
     img = Image.new(mode="RGB", size=(inky_display.width, inky_display.height),color=(255,255,255))
-    clearImage = ImageDraw.Draw(img)
-    inky_display.set_image(toInkyPalette(img))
-    inky_display.show()
-    updateEink(os.listdir(app.config['UPLOAD_FOLDER'])[0],ORIENTATION,ADJUST_AR)
+
+    with displayLock:
+        inky_display.set_image(toInkyPalette(img))
+        inky_display.show()
+
+    updateEink(os.listdir(UPLOAD_FOLDER)[0])
 
 def toInkyPalette(img, saturation=0.5):
     # inky's own conversion breaks on newer Pillow ("empty palette"), so quantize here
@@ -212,59 +229,22 @@ def toInkyPalette(img, saturation=0.5):
     paletteImg.putpalette(palette + [0, 0, 0] * 248)
     return img.convert("RGB").quantize(palette=paletteImg, dither=Image.Dither.FLOYDSTEINBERG)
 
-
-def changeOrientation(img,orientation):
-    # 0 = horizontal
-    # 1 = portrait
-    if orientation == 0:
-        img = img.rotate(180, expand=True)
-    elif orientation == 1:
-        img = img.rotate(90, expand=True)
-    return img
-
-def adjustAspectRatio(img,adjustARBool):
-    if adjustARBool:
-        w = inky_display.width
-        h = inky_display.height
-        ratioWidth = w / img.width
-        ratioHeight = h / img.height
-        if ratioWidth < ratioHeight:
-            # It must be fixed by width
-            resizedWidth = w
-            resizedHeight = round(ratioWidth * img.height)
-        else:
-            # Fixed by height
-            resizedWidth = round(ratioHeight * img.width)
-            resizedHeight = h
-        imgResized = img.resize((resizedWidth, resizedHeight), Image.LANCZOS)
-        background = Image.new('RGBA', (w, h), (255, 255, 255, 255))
-
-        #offset image for background and paste the image
-        offset = (round((w - resizedWidth) / 2), round((h - resizedHeight) / 2))
-        background.paste(imgResized, offset)
-        img = background
-    else:
-        img = img.resize(inky_display.resolution)
-    return img
-
 def deleteImage():
-    img_directory = os.path.join(PATH, "img")
-    for filename in os.listdir(img_directory):
-        fp = os.path.join(img_directory, filename)
+    for filename in os.listdir(UPLOAD_FOLDER):
+        fp = os.path.join(UPLOAD_FOLDER, filename)
         if os.path.isfile(fp):
             os.remove(fp)
             
 def rotateImage(deg):
-    
-    with Image.open(os.path.join(PATH, "img/",os.listdir(app.config['UPLOAD_FOLDER'])[0])) as img:
-        #rotate image by degrees and update
-        img = img.rotate(deg, Image.NEAREST,expand=1)
-        img = img.save(os.path.join(PATH, "img/",os.listdir(app.config['UPLOAD_FOLDER'])[0]))
-        updateEink(os.listdir(app.config['UPLOAD_FOLDER'])[0],ORIENTATION,ADJUST_AR)
+    with settingsLock:
+        rotation = (readSettingsFile().get("rotation", 0) + deg) % 360
+        writeSettingsFile(rotation=rotation)
+
+    updateEink(os.listdir(UPLOAD_FOLDER)[0])
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'],filename)
+    return send_from_directory(UPLOAD_FOLDER,filename)
 
 
 #run button checks on gpio    
