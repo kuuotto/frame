@@ -184,6 +184,7 @@ def updateEinkAsync(*args):
     threading.Thread(target=updateEink, args=args, daemon=True).start()
 
 def updateEink(filename, rotation=None):
+    print(f"updateEink: {filename}")
     settings = readSettingsFile()
     # how the frame is oriented: in portait the eink is rotated 90deg, in
     # landscape 180deg
@@ -192,6 +193,7 @@ def updateEink(filename, rotation=None):
         rotation = settings.get("rotation", 0)
 
     with displayLock, Image.open(os.path.join(UPLOAD_FOLDER, filename)) as img:
+        print(f"opened {img.format} {img.size}")
         # decode JPEGs at reduced size for faster processing
         img.draft("RGB", (inky_display.width * 2, inky_display.height * 2))
 
@@ -209,7 +211,9 @@ def updateEink(filename, rotation=None):
 
         # Display the image
         inky_display.set_image(toInkyPalette(img))
+        print("refreshing display...")
         inky_display.show()
+        print("display done")
 
 #clear the screen to prevent ghosting
 def clearScreen():

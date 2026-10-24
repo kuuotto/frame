@@ -27,4 +27,4 @@ source $currentDir/venv/bin/activate
 
 echo "starting PiInk frame webserver!"
 
-python $currentDir/src/webserver.py
+python -u $currentDir/src/webserver.py
