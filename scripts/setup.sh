@@ -30,19 +30,27 @@ show_loader() {
   local pid=$!
   local delay=0.1
   local spinstr='|/-\'
+  if [[ -z $pid ]]; then
+    echo "show_loader: no background job" >&2
+    return 1
+  fi
   printf "$1 [${spinstr:0:1}] "
-  while ps a | awk '{print $1}' | grep -q "${pid}"; do
+  while kill -0 "$pid" 2>/dev/null; do
     local temp=${spinstr#?}
     printf "\r$1 [${temp:0:1}] "
     spinstr=${temp}${spinstr%"${temp}"}
     sleep ${delay}
   done
-  if [[ $? -eq 0 ]]; then
+  wait "$pid"
+  local status=$?
+  if [[ $status -eq 0 ]]; then
     printf "\r$1 [\e[32m\xE2\x9C\x94\e[0m]\n"
   else
     printf "\r$1 [\e[31m\xE2\x9C\x98\e[0m]\n"
   fi
+  return $status
 }
+
 
 
 #status funcs
@@ -86,22 +94,16 @@ print_blue() {
 }
 
 
-# Set the current  and ip
-currentDir=$(dirname "$PWD")
-currentWorkingDir=$(pwd)
-currentFolder=${PWD##*/} 
+# Project root = parent of the folder this script lives in, wherever it's run from
+projectDir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$projectDir" || exit 1
+currentWorkingDir="$projectDir"
 ipAddress=$(hostname -I | cut -d ' ' -f 1)
 
 # do a sudo check!
 if [ "$EUID" -ne 0 ]; then
   echo -e "\n[ERROR]: $(print_error "The PiInk installation script requires root privileges. Please run it with sudo.\n")"
   exit 1
-fi
-
-if [ "$currentFolder" == "scripts" ]; then
-  cd ..
-  currentDir=$(pwd)
-  currentWorkingDir=$(pwd)
 fi
 
 while true; do
@@ -134,15 +136,18 @@ done
 enable_interfaces
 
 print_header  "Creating a Python virtual environment"
-python -m venv venv
+apt-get update > /dev/null
+apt-get install -y python3-venv python3-dev > /dev/null
+python3 -m venv "$projectDir/venv" || { print_error "Failed to create venv"; exit 1; }
+
 
 print_header  "Activating the virtual environment"
-source venv/bin/activate
+source "$projectDir/venv/bin/activate"
 
-print_header  "Installing the Pimoroni Inky libraries."
-pip install inky[rpi,example-depends] > /dev/null &
-pip install inky > /dev/null &
-show_loader "   Installing packages...    "
+# print_header  "Installing the Pimoroni Inky libraries."
+# pip install inky[rpi,example-depends] > /dev/null &
+# pip install inky > /dev/null &
+# show_loader "   Installing packages...     "
 #curl https://get.pimoroni.com/inky | bash
 
 sudo apt-get install -y sysvbanner > /dev/null
@@ -174,27 +179,28 @@ print_header "Creating PiInk service"
 
 sleep 1
 if [ -f "/etc/systemd/system/piink.service" ]; then
-    sudo systemctl stop piink > /dev/null 2>&1 &
-    sudo systemctl disable piink > /dev/null 2>&1 &
-    sudo rm -f /etc/systemd/system/piink.service
-    sudo systemctl daemon-reload > /dev/null 2>&1 &
-    show_loader "   Found old service, removing...   "
-    sleep 1
+    print_bold "   Found old service, removing..."
+    systemctl stop piink > /dev/null 2>&1
+    systemctl disable piink > /dev/null 2>&1
+    rm -f /etc/systemd/system/piink.service
+    systemctl daemon-reload
 fi
 # Create and enable new service
-sudo sed -e "s|%WORKING_DIR%|${currentWorkingDir}|g" ${currentWorkingDir}/config/piink.service > /etc/systemd/system/piink.service
-sudo systemctl daemon-reload > /dev/null 2>&1 &
-sudo systemctl enable piin≥÷k > /dev/null 2>&1 &
-show_loader "   Creating new service...          "
-
-print_success "Service created!"
+sudo sed -e "s|%WORKING_DIR%|${currentWorkingDir}|g" "${currentWorkingDir}/config/piink.service" > /etc/systemd/system/piink.service
+sudo systemctl daemon-reload
+if systemctl enable piink > /dev/null 2>&1; then
+    print_success "Service created!"
+else
+    print_error "Failed to enable piink service"; exit 1
+fi
 
 # Install required pip packages
-print_header  "\nInstalling required packages with pip"
-pip install -r $currentWorkingDir/config/requirements.txt > /dev/null &
-show_loader "   Installing packages...   "
+if pip install -r "$currentWorkingDir/config/requirements.txt"; then
+    print_success "Packages Installed!\n"
+else
+    print_error "pip install failed, see output above."; exit 1
+fi
 
-print_success "Packages Installed!\n"
 sleep 3
 clear
 banner "PiInk"
