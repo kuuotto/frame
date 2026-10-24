@@ -13,16 +13,25 @@ green=$(tput setaf 2)
 yellow=$(tput setaf 3)
 
 enable_interfaces(){
+  # Bookworm moved config.txt to /boot/firmware
+  if [ -f /boot/firmware/config.txt ]; then
+    configFile=/boot/firmware/config.txt
+  else
+    configFile=/boot/config.txt
+  fi
+
   #enable spi
-  sudo sed -i 's/^dtparam=spi=.*/dtparam=spi=on/' /boot/config.txt
-  sudo sed -i 's/^#dtparam=spi=.*/dtparam=spi=on/' /boot/config.txt
-  sudo raspi-config nonint do_spi 0
+  raspi-config nonint do_spi 0
   print_success "SPI Interface has been enabled."
   #enable i2c
-  sudo sed -i 's/^dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' /boot/config.txt
-  sudo sed -i 's/^#dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' /boot/config.txt
-  sudo raspi-config nonint do_i2c 0
+  raspi-config nonint do_i2c 0
   print_success "I2C Interface has been enabled.\n"
+
+  # free the SPI chip-select pin so inky can drive it (needed by Inky Impression)
+  if ! grep -q "^dtoverlay=spi0-0cs" "$configFile"; then
+    echo -e "\n[all]\ndtoverlay=spi0-0cs" >> "$configFile"
+  fi
+  print_success "SPI chip-select overlay enabled.\n"
 }
 
 
