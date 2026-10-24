@@ -195,6 +195,7 @@ else
 fi
 
 # Install required pip packages
+print_header "Installing Required Python Packages"
 if pip install -r "$currentWorkingDir/config/requirements.txt"; then
     print_success "Packages Installed!\n"
 else
