@@ -193,7 +193,7 @@ def updateEink(filename,orientation,adjustAR):
         img = ImageOps.fit(img, (inky_display.width, inky_display.height))
 
         # Display the image
-        inky_display.set_image(img)
+        inky_display.set_image(toInkyPalette(img))
         inky_display.show()
 
 #clear the screen to prevent ghosting
@@ -201,10 +201,16 @@ def clearScreen():
     print("running ghost clear")
     img = Image.new(mode="RGB", size=(inky_display.width, inky_display.height),color=(255,255,255))
     clearImage = ImageDraw.Draw(img)
-    inky_display.set_image(img)
+    inky_display.set_image(toInkyPalette(img))
     inky_display.show()
     updateEink(os.listdir(app.config['UPLOAD_FOLDER'])[0],ORIENTATION,ADJUST_AR)
 
+def toInkyPalette(img, saturation=0.5):
+    # inky's own conversion breaks on newer Pillow ("empty palette"), so quantize here
+    palette = inky_display._palette_blend(saturation)
+    paletteImg = Image.new("P", (1, 1))
+    paletteImg.putpalette(palette + [0, 0, 0] * 248)
+    return img.convert("RGB").quantize(palette=paletteImg, dither=Image.Dither.FLOYDSTEINBERG)
 
 
 def changeOrientation(img,orientation):
