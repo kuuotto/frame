@@ -36,6 +36,42 @@ sudo bash install.sh
 
 Upon reboot, the PiInk program will start and be accessible on the web at the Raspberry Pi's IP address or at `piink.local` 
 
+# System service
+
+To check whether the `piink` system service is running:
+```bash
+sudo systemctl status piink.service
+```
+
+To check the logs:
+```bash
+journalctl -u piink.service -f
+```
+
+To disable the system service (so it doesn't start on boot):
+```bash
+sudo systemctl disable piink
+```
+
+To enable the system service:
+```bash
+sudo systemctl enable piink
+```
+
+To start the system service:
+```bash
+sudo systemctl start piink
+```
+
+To stop the system service (it will still restart on next boot):
+```bash
+sudo systemctl stop piink
+```
+
+To restart the system service:
+```bash
+sudo systemctl restart piink
+```
 
 # WebUI & PiInk Buttons
 
@@ -87,47 +123,6 @@ PiInk's 3D printed mount is tailored to fit the Raspberry Pi Zero family, but it
 - **[7.3 Inch Display](https://shop.pimoroni.com/products/inky-impression-7-3)**
 
 The included mounting hardware is used to secure the Inky Impression to the 3D-printed stand.
-
-### 3D Printed Stand
-
-Find 3D printable stand files in the [STL folder](https://github.com/tlstommy/PiInk/tree/main/STL) or on [Printables.com](https://www.printables.com/model/552238-piink-a-raspberry-pi-powered-e-ink-picture-frame). Select the appropriate stand for your E-Ink display size from the table below:
-
-| E-Ink Display                  | STL file                                                                                           |
-| ------------------------------ |:--------------------------------------------------------------------------------------------------:|
-| Inky Impression - 4.0 Inches   | [4 Inch Stand](https://github.com/tlstommy/PiInk/blob/main/STL/PiInk_stand_4_Inch.stl)             |
-| Inky Impression - 5.7 Inches   | [5.7 Inch Stand](https://github.com/tlstommy/PiInk/blob/main/STL/PiInk_stand_5.7_Inch.stl)         |
-| Inky Impression - 7.3 Inches   | [7.3 Inch Stand](https://github.com/tlstommy/PiInk/blob/main/STL/PiInk_stand_7.3_Inch.stl)         |
-
-
-#### Recommended Printing Settings
-- Layer Height: 0.15mm
-- Infill: 10%-15%
-- Supports: Baseplate
-
-# PiInk Frame Assembly
-
-Mounting the PiInk onto the PiInk stand is a straightforward process that can be completed in 3 simple steps.
-
-**You will need the following materials that are included with the Inky Impression:**
-- (2) Standoffs
-- (2) Screws
-  
-### Step 1: Attach the Pi Zero and install the standoffs to the lower mounting holes.
-![Assembly Step 1](https://github.com/tlstommy/PiInk/assets/36305669/aee84a70-efd5-4cc2-aec4-e3419f7ba9ac)
-
-### Step 2: Secure the stand onto standoffs using the screws. They will thread themselves.
-![Assembly Step 2](https://github.com/tlstommy/PiInk/assets/36305669/31585b41-ff0b-4884-9739-a2917a938b48)
-
-### Step 3: Route the Raspberry Pi power cable behind the PiInk stand.
-![Assembly Step 3](https://github.com/tlstommy/PiInk/assets/36305669/84fbf238-1630-4371-92aa-cf4432f78f38)
-
-# Demo
-
-**Below is a video showing the PiInk updating to a new image.**
-
-[IMG_0512 (1).webm](https://github.com/tlstommy/PiInk/assets/36305669/4dda6b41-d10e-469c-a952-cf3f85b38dbc)
-
-
 
 
 # Issues & Suggestions
