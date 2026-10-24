@@ -10,7 +10,7 @@ from inky.auto import auto
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
-import generateInfo
+# import generateInfo
 
 displayLock = threading.Lock()
 
@@ -46,10 +46,10 @@ app = Flask(__name__)
 def handleButton(pin):
     # top button
     if pin == 5:
-        print("--A-- Pressed: Show PiInk info")
-        generateInfo.infoGen(inky_display.width, inky_display.height)
+        print("--A-- Pressed: [disabled]")
+        # generateInfo.infoGen(inky_display.width, inky_display.height)
         # update the eink display
-        updateEinkAsync("infoImage.png", 0)
+        # updateEinkAsync("infoImage.png", 0)
     elif pin == 6:
         print("--B-- Pressed: Rotate image clockwise")
         threading.Thread(target=rotateImage, args=(-90,), daemon=True).start()
@@ -133,7 +133,7 @@ def upload_file():
         # shutdown
         if submit == "Shutdown":
             print("shutdown")
-            os.system("shutdown")
+            os.system("shutdown now")
 
         # rotate clockwise
         if submit == "rotateImage":
